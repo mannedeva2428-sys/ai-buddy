@@ -1,0 +1,33 @@
+# Virtual environment & Dependencies
+.venv/
+venv/
+ENV/
+node_modules/
+
+# Environment Variables & Sensitive Credentials
+.env
+*.env
+!.env.example
+
+# Python cache & build outputs
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Frontend Build output
+frontend/dist/
+frontend/build/
+
+# IDE & Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini

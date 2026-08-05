@@ -1,0 +1,17 @@
+{
+  "name": "ai-voice-assistant",
+  "private": true,
+  "scripts": {
+    "frontend": "cd frontend && npm run dev",
+    "backend": "cd backend && python -m uvicorn app.main:app --reload",
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.4"
+  },
+  "dependencies": {
+    "@tsparticles/react": "^4.3.2",
+    "@tsparticles/slim": "^4.3.2",
+    "tsparticles": "^4.3.2"
+  }
+}
