@@ -3,9 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import MobileNav from '../components/MobileNav'
 import TopNavigation from '../components/TopNavigation'
+import { useTheme } from '../context/ThemeContext'
 import { chatAPI } from '../services/api'
 
 export default function History() {
+  const { theme } = useTheme()
+  const isLight = theme === 'light'
+
   const [conversations, setConversations] = useState([])
   const [loading, setLoading] = useState(true)
   const [openId, setOpenId] = useState(null)
@@ -55,7 +59,7 @@ export default function History() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col md:flex-row">
+    <div className={`min-h-screen flex flex-col md:flex-row transition-colors ${isLight ? 'bg-slate-50 text-slate-800' : 'bg-slate-950 text-white'}`}>
       <Sidebar />
 
       <main className="flex-1 h-screen overflow-y-auto chat-scroll pb-24 md:pb-6">
@@ -63,47 +67,61 @@ export default function History() {
 
         <div className="max-w-2xl mx-auto px-4 md:px-8 py-6">
           {loading ? (
-            <p className="text-slate-500 text-sm">Loading…</p>
+            <p className={`text-sm ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Loading…</p>
           ) : conversations.length === 0 ? (
             <div className="text-center py-20">
-              <p className="text-slate-500 text-sm">No conversations yet.</p>
+              <p className={`text-sm ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>No conversations yet.</p>
               <button
                 onClick={() => navigate('/dashboard')}
-                className="mt-4 text-sm text-brand-400 hover:text-brand-300 font-medium"
+                className={`mt-4 text-sm font-medium ${isLight ? 'text-indigo-600 hover:text-indigo-700' : 'text-brand-400 hover:text-brand-300'}`}
               >
                 Start chatting →
               </button>
             </div>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-2.5">
               {conversations.map((c) => (
                 <li key={c.conversation_id}>
                   <div
                     onClick={() => openConversation(c.conversation_id)}
-                    className="cursor-pointer bg-slate-900/60 border border-white/5 rounded-xl px-4 py-3 hover:border-brand-500/30 transition-colors"
+                    className={`cursor-pointer border rounded-xl px-4 py-3.5 transition-all ${
+                      isLight
+                        ? 'bg-white border-slate-200 shadow-sm hover:border-indigo-400'
+                        : 'bg-slate-900/60 border-white/5 hover:border-indigo-500/40'
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-100 truncate">{c.title}</p>
-                        <p className="text-xs text-slate-500 truncate mt-0.5">{c.last_message}</p>
+                        <p className={`text-sm font-semibold truncate ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>
+                          {c.title}
+                        </p>
+                        <p className={`text-xs truncate mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                          {c.last_message}
+                        </p>
                       </div>
                       <button
                         onClick={(e) => handleDelete(c.conversation_id, e)}
-                        className="shrink-0 text-slate-600 hover:text-red-400 text-xs"
+                        className={`shrink-0 text-xs transition-colors cursor-pointer ${
+                          isLight ? 'text-slate-400 hover:text-rose-600' : 'text-slate-600 hover:text-rose-400'
+                        }`}
                       >
                         Delete
                       </button>
                     </div>
 
                     {openId === c.conversation_id && (
-                      <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
+                      <div className={`mt-3 pt-3 border-t space-y-2 ${isLight ? 'border-slate-200' : 'border-white/5'}`}>
                         {messages.map((m) => (
                           <div
                             key={m.id}
                             className={`text-xs rounded-lg px-3 py-2 ${
                               m.role === 'user'
-                                ? 'bg-brand-500/10 text-brand-200 ml-auto max-w-[85%]'
-                                : 'bg-white/5 text-slate-300 max-w-[85%]'
+                                ? isLight
+                                  ? 'bg-indigo-100 text-indigo-900 ml-auto max-w-[85%]'
+                                  : 'bg-indigo-500/20 text-indigo-200 ml-auto max-w-[85%]'
+                                : isLight
+                                  ? 'bg-slate-100 text-slate-800 max-w-[85%]'
+                                  : 'bg-white/5 text-slate-300 max-w-[85%]'
                             }`}
                           >
                             {m.content}
@@ -123,3 +141,4 @@ export default function History() {
     </div>
   )
 }
+

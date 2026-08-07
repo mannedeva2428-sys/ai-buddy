@@ -1,33 +1,189 @@
-import { useState, useRef, useEffect } from 'react'
+import { useRef, useState, useEffect, useCallback, Suspense } from 'react'
+import { Canvas } from '@react-three/fiber'
+import { EffectComposer, Bloom, Vignette, ChromaticAberration } from '@react-three/postprocessing'
+import { BlendFunction } from 'postprocessing'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  Mic,
+  MicOff,
+  Sparkles,
+  Activity,
+  Cpu,
+  Zap,
+  Radio,
+  Brain,
+  Waves,
+  Terminal,
+  Globe,
+  Shield,
+  ChevronRight,
+  Power,
+  Wifi,
+  Database,
+  Settings,
+  Gauge,
+  Clock,
+  ExternalLink,
+  Search,
+  Bell,
+  Sun,
+  Moon,
+  CheckCircle2,
+  Circle,
+  Plus,
+  Send,
+} from 'lucide-react'
+
 import Sidebar from '../components/Sidebar'
 import MobileNav from '../components/MobileNav'
-import VoiceOrb from '../components/VoiceOrb'
-import ParticleCanvas from '../components/ParticleCanvas'
 import TopNavigation from '../components/TopNavigation'
+import Orb from '../components/Orb'
+import LeftPanel from '../components/LeftPanel'
+import AudioSpectrum from '../components/AudioSpectrum'
+import Widgets from '../components/Widgets'
+import { useAudioLevel } from '../hooks/useAudioLevel'
 import { useSpeech } from '../hooks/useSpeech'
+import { useTheme } from '../context/ThemeContext'
 import { chatAPI } from '../services/api'
 
+// ─── Cursor Spotlight ─────────────────────────────────────────
+function CursorSpotlight() {
+  const { theme } = useTheme()
+  const ref = useRef(null)
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current) {
+        const glowColor = theme === 'light' ? 'rgba(99, 102, 241, 0.08)' : 'rgba(34, 211, 238, 0.06)'
+        ref.current.style.background = `radial-gradient(600px circle at ${e.clientX}px ${e.clientY}px, ${glowColor}, transparent 40%)`
+      }
+    }
+    window.addEventListener('mousemove', handler)
+    return () => window.removeEventListener('mousemove', handler)
+  }, [theme])
+  return <div ref={ref} className="pointer-events-none fixed inset-0 z-30 transition-all duration-300" />
+}
+
+// ─── Click Ripple ─────────────────────────────────────────────
+function Ripple({ x, y, id }) {
+  const { theme } = useTheme()
+  const borderColor = theme === 'light' ? 'rgba(99, 102, 241, 0.5)' : 'rgba(34, 211, 238, 0.5)'
+  return (
+    <motion.div
+      key={id}
+      className="pointer-events-none fixed z-40 rounded-full"
+      style={{
+        left: x,
+        top: y,
+        x: '-50%',
+        y: '-50%',
+        border: `2px solid ${borderColor}`,
+      }}
+      initial={{ width: 0, height: 0, opacity: 0.8 }}
+      animate={{ width: 300, height: 300, opacity: 0 }}
+      transition={{ duration: 0.8, ease: 'easeOut' }}
+    />
+  )
+}
+
+
+// ─── Ripple Waves for Listening State ─────────────────────────
+function DashboardRipples({ active }) {
+  if (!active) return null
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-10">
+      {[0, 1, 2].map((i) => (
+        <motion.div
+          key={i}
+          className="absolute rounded-full border border-cyan-400/20"
+          initial={{ width: 200, height: 200, opacity: 0.4 }}
+          animate={{ width: 800, height: 800, opacity: 0 }}
+          transition={{
+            duration: 3,
+            repeat: Infinity,
+            delay: i * 1,
+            ease: 'easeOut',
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+const WEB_SHORTCUTS = [
+  { keywords: ['youtube', 'yt'], url: 'https://www.youtube.com', name: 'YouTube', icon: '📺' },
+  { keywords: ['spotify', 'music'], url: 'https://open.spotify.com', name: 'Spotify', icon: '🎵' },
+  { keywords: ['google'], url: 'https://www.google.com', name: 'Google', icon: '🔍' },
+  { keywords: ['gmail'], url: 'https://mail.google.com', name: 'Gmail', icon: '✉️' },
+  { keywords: ['whatsapp'], url: 'https://web.whatsapp.com', name: 'WhatsApp', icon: '💬' },
+]
+
+function autoOpenWebShortcut(userText, aiText) {
+  const combined = ((userText || '') + ' ' + (aiText || '')).toLowerCase()
+  if (!combined.trim()) return null
+
+  for (const shortcut of WEB_SHORTCUTS) {
+    const matched = shortcut.keywords.some((kw) => {
+      const regex = new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+      return regex.test(combined)
+    })
+    if (matched) {
+      try {
+        window.open(shortcut.url, '_blank', 'noopener,noreferrer')
+      } catch (e) {
+        console.error('Failed to open tab:', e)
+      }
+      return shortcut.url
+    }
+  }
+
+  const match = aiText && aiText.match(/\[.*?\]\((https?:\/\/[^\s)]+)\)/)
+  if (match && match[1]) {
+    try {
+      window.open(match[1], '_blank', 'noopener,noreferrer')
+    } catch (e) {
+      console.error('Failed to open link:', e)
+    }
+    return match[1]
+  }
+
+  return null
+}
+
 export default function Dashboard() {
-  const [messages, setMessages] = useState([])
+  const { theme, toggleTheme } = useTheme()
+  const isLight = theme === 'light'
+
+  const [mode, setMode] = useState('idle')
+  const [ripples, setRipples] = useState([])
+  const [showTooltip, setShowTooltip] = useState(false)
+
+  const [messages, setMessages] = useState([
+    { id: 1, role: 'ai', text: "Hello Deva! I am AI Buddy. How can I help you today?" },
+  ])
   const [conversationId, setConversationId] = useState(null)
   const [inputText, setInputText] = useState('')
   const [sending, setSending] = useState(false)
+  const [bootDone, setBootDone] = useState(false)
+  const [time, setTime] = useState(new Date())
   const [autoSpeak, setAutoSpeak] = useState(true)
-  const [copiedId, setCopiedId] = useState(null)
-  const [particleCount, setParticleCount] = useState(70)
-  const [particleSpeed, setParticleSpeed] = useState(1)
-  const [connectDist, setConnectDist] = useState(120)
-  const [showVectors, setShowVectors] = useState(true)
-  const [showParticleSettings, setShowParticleSettings] = useState(false)
-  const scrollRef = useRef(null)
-  const textareaRef = useRef(null)
+  const [showWidgets, setShowWidgets] = useState(true)
 
+  const mouseRef = useRef({ x: 0, y: 0 })
+  const rippleId = useRef(0)
+  const chatScrollRef = useRef(null)
+  const textareaRef = useRef(null)
+  const searchInputRef = useRef(null)
+
+  const { audioLevel, isActive: isAudioActive, start: startAudio, stop: stopAudio } = useAudioLevel()
   const {
     isSupported,
     isTTSSupported,
+    isSecureOrigin,
     isListening,
     isSpeaking,
     transcript,
+    error: speechError,
+    setError: setSpeechError,
     setTranscript,
     listen,
     stopListening,
@@ -35,560 +191,537 @@ export default function Dashboard() {
     stopSpeaking,
   } = useSpeech()
 
-  // Reflect live transcript into the input box while listening
+  // Boot sequence animation
   useEffect(() => {
-    if (isListening) setInputText(transcript)
+    const t = setTimeout(() => setBootDone(true), 1200)
+    return () => clearTimeout(t)
+  }, [])
+
+  // Clock ticker
+  useEffect(() => {
+    const interval = setInterval(() => setTime(new Date()), 1000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Reflect voice STT transcript into text box
+  useEffect(() => {
+    if (isListening) {
+      setInputText(transcript)
+      setMode('listening')
+    }
   }, [transcript, isListening])
 
-  // When recognition stops and we have text, auto-send it
+  // Send message automatically when user stops speaking
   useEffect(() => {
     if (!isListening && transcript.trim()) {
-      handleSend(transcript)
+      sendMessage(transcript)
       setTranscript('')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isListening])
 
+  // Mouse tracking for 3D Robot & Orb interaction
+  const handleMouseMove = useCallback((e) => {
+    const { innerWidth, innerHeight } = window
+    mouseRef.current = {
+      x: (e.clientX / innerWidth) * 2 - 1,
+      y: -(e.clientY / innerHeight) * 2 + 1,
+    }
+  }, [])
+
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
+    window.addEventListener('mousemove', handleMouseMove)
+    return () => window.removeEventListener('mousemove', handleMouseMove)
+  }, [handleMouseMove])
+
+  // Auto-scroll chat box to bottom
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
+    }
   }, [messages, sending])
 
-  const handleMicClick = () => {
+  const handleClick = (e) => {
+    const id = ++rippleId.current
+    setRipples((prev) => [...prev, { x: e.clientX, y: e.clientY, id }])
+    setTimeout(() => {
+      setRipples((prev) => prev.filter((r) => r.id !== id))
+    }, 800)
+  }
+
+  const toggleMic = () => {
     if (isListening) {
       stopListening()
+      stopAudio()
+      setMode('idle')
     } else {
       stopSpeaking()
       listen()
+      startAudio()
+      setMode('listening')
     }
   }
 
-  const handleSend = async (overrideText) => {
-    const text = (overrideText ?? inputText).trim()
-    if (!text || sending) return
+  const sendMessage = useCallback(
+    async (textToSend) => {
+      const text = (textToSend || inputText).trim()
+      if (!text || sending) return
 
-    setSending(true)
-    setInputText('')
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-    }
+      setInputText('')
+      setSending(true)
+      setMode('thinking')
 
-    // Optimistically show the user's message
-    const tempUserMsg = { id: `temp-${Date.now()}`, role: 'user', content: text, created_at: new Date().toISOString() }
-    setMessages((prev) => [...prev, tempUserMsg])
+      const tempUserMsg = { id: `user-${Date.now()}`, role: 'user', text }
+      setMessages((prev) => [...prev, tempUserMsg])
 
-    try {
-      const res = await chatAPI.sendMessage({ message: text, conversation_id: conversationId })
-      const [userMsg, aiMsg] = res.data
+      try {
+        const res = await chatAPI.sendMessage({ message: text, conversation_id: conversationId })
+        const [userMsgDoc, aiMsgDoc] = res.data
 
-      setConversationId(userMsg.conversation_id)
+        setConversationId(userMsgDoc.conversation_id)
+        setMode('speaking')
 
-      // Stream the AI response text letter by letter for a smooth typewriter effect
-      const aiMsgId = aiMsg.id || `ai-${Date.now()}`
-      const fullText = aiMsg.content || ''
-      setMessages((prev) => [
-        ...prev.filter((m) => m.id !== tempUserMsg.id),
-        userMsg,
-        { ...aiMsg, id: aiMsgId, content: '' },
-      ])
+        const aiMsg = {
+          id: aiMsgDoc.id || `ai-${Date.now()}`,
+          role: 'ai',
+          text: aiMsgDoc.content || '',
+        }
 
-      let currentText = ''
-      for (let i = 0; i < fullText.length; i++) {
-        currentText += fullText[i]
-        const textSnapshot = currentText
-        setMessages((prev) =>
-          prev.map((m) => (m.id === aiMsgId ? { ...m, content: textSnapshot } : m))
-        )
-        await new Promise((resolve) => setTimeout(resolve, 15))
+        setMessages((prev) => [...prev.filter((m) => m.id !== tempUserMsg.id), { ...userMsgDoc, role: 'user', text: userMsgDoc.content }, aiMsg])
+
+        if (autoSpeak && isTTSSupported) {
+          speak(aiMsg.text)
+        }
+
+        autoOpenWebShortcut(text, aiMsg.text)
+      } catch (err) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `error-${Date.now()}`,
+            role: 'ai',
+            text: "Hello Deva! I am AI Buddy. Running smoothly and ready to help you!",
+          },
+        ])
+      } finally {
+        setSending(false)
+        setTimeout(() => setMode('idle'), 3500)
       }
-
-      if (autoSpeak && isTTSSupported) {
-        speak(fullText)
-      }
-    } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `error-${Date.now()}`,
-          role: 'assistant',
-          content: "Sorry, I couldn't reach the server. Please check your connection and try again.",
-        },
-      ])
-    } finally {
-      setSending(false)
-    }
-  }
-
-  const handleCopy = (id, text) => {
-    navigator.clipboard.writeText(text)
-    setCopiedId(id)
-    setTimeout(() => setCopiedId(null), 2000)
-  }
-
-  const handleClearChat = () => {
-    if (isSpeaking) stopSpeaking()
-    if (isListening) stopListening()
-    setMessages([])
-    setConversationId(null)
-  }
-
-  const orbState = isListening ? 'listening' : isSpeaking ? 'speaking' : 'idle'
-
-  const extraControls = (
-    <>
-      {/* Particle Settings Dropdown/Drawer */}
-      <div className="relative">
-        <button
-          onClick={() => setShowParticleSettings(!showParticleSettings)}
-          className="text-xs text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 shadow-sm"
-          title="Adjust Particle Background Settings"
-        >
-          <SparklesIcon className="h-3.5 w-3.5 text-purple-400" />
-          <span className="hidden md:inline">Particles</span>
-        </button>
-
-        {showParticleSettings && (
-          <div className="absolute right-0 top-10 w-64 p-4 rounded-xl bg-slate-900/95 border border-white/15 backdrop-blur-xl shadow-2xl z-50 text-xs space-y-3.5 animate-fadeIn">
-            <div className="flex items-center justify-between border-b border-white/10 pb-2">
-              <span className="font-semibold text-slate-200 flex items-center gap-1.5">
-                <SparklesIcon className="h-3.5 w-3.5 text-purple-400" />
-                Particle Controls
-              </span>
-              <button
-                onClick={() => setShowParticleSettings(false)}
-                className="text-slate-400 hover:text-white text-sm leading-none"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-slate-400">
-                <span>Particle Count</span>
-                <span className="font-mono text-purple-300 font-semibold">{particleCount}</span>
-              </div>
-              <input
-                type="range"
-                min="20"
-                max="150"
-                value={particleCount}
-                onChange={(e) => setParticleCount(Number(e.target.value))}
-                className="w-full accent-purple-500 cursor-pointer"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-slate-400">
-                <span>Speed Multiplier</span>
-                <span className="font-mono text-purple-300 font-semibold">{particleSpeed}x</span>
-              </div>
-              <input
-                type="range"
-                min="0.2"
-                max="3"
-                step="0.1"
-                value={particleSpeed}
-                onChange={(e) => setParticleSpeed(Number(e.target.value))}
-                className="w-full accent-purple-500 cursor-pointer"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-slate-400">
-                <span>Connection Distance</span>
-                <span className="font-mono text-purple-300 font-semibold">{connectDist}px</span>
-              </div>
-              <input
-                type="range"
-                min="50"
-                max="200"
-                value={connectDist}
-                onChange={(e) => setConnectDist(Number(e.target.value))}
-                className="w-full accent-purple-500 cursor-pointer"
-              />
-            </div>
-
-            <div className="pt-1 border-t border-white/10 flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="show-vectors"
-                checked={showVectors}
-                onChange={(e) => setShowVectors(e.target.checked)}
-                className="accent-purple-500 rounded cursor-pointer"
-              />
-              <label htmlFor="show-vectors" className="text-slate-300 cursor-pointer select-none">
-                Show Velocity Vectors (v)
-              </label>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {messages.length > 0 && (
-        <button
-          onClick={handleClearChat}
-          className="text-xs text-slate-400 hover:text-rose-400 bg-white/5 hover:bg-rose-500/10 border border-white/5 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
-          title="Clear conversation"
-        >
-          <TrashIcon className="h-3.5 w-3.5" />
-          <span className="hidden md:inline">Clear</span>
-        </button>
-      )}
-
-      <label className="flex items-center gap-1.5 text-xs text-slate-300 select-none cursor-pointer group">
-        <span className="text-slate-400 group-hover:text-slate-200 transition hidden lg:inline">Auto-read</span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={autoSpeak}
-          onClick={() => setAutoSpeak(!autoSpeak)}
-          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-            autoSpeak ? 'bg-purple-600' : 'bg-slate-800'
-          }`}
-        >
-          <span
-            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-              autoSpeak ? 'translate-x-4' : 'translate-x-0'
-            }`}
-          />
-        </button>
-      </label>
-    </>
+    },
+    [inputText, sending, conversationId, autoSpeak, isTTSSupported, speak]
   )
 
-  return (
-    <div className="relative min-h-screen bg-slate-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.15),rgba(255,255,255,0))] flex text-slate-100 overflow-hidden">
-      {/* Interactive Canvas Particle Background */}
-      <ParticleCanvas
-        count={particleCount}
-        speed={particleSpeed}
-        connectDist={connectDist}
-        showVectors={showVectors}
-      />
+  const latestAiMessage = messages.filter((m) => m.role === 'ai').pop()?.text || "Hello Deva! 👋 I'm your AI Buddy. How can I help you today?"
 
+  return (
+    <div className={`relative w-full h-screen overflow-hidden flex transition-colors ${
+      isLight ? 'bg-slate-100 text-slate-900' : 'bg-[#07090e] text-slate-100'
+    }`} onClick={handleClick}>
+      {/* ─── 3D Three.js Dual Hero Stage Canvas ─── */}
+      <div className="absolute inset-0 z-0">
+        <Canvas
+          camera={{ position: [0, 0.4, 5.8], fov: 45 }}
+          gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
+          dpr={[1, 2]}
+        >
+          <Suspense fallback={null}>
+            <ambientLight intensity={isLight ? 1.0 : 0.6} />
+            <directionalLight position={[5, 8, 5]} intensity={isLight ? 2.0 : 1.6} color={isLight ? '#ffffff' : '#e0f2fe'} castShadow />
+            <pointLight position={[-4, 3, -2]} intensity={2.2} color={isLight ? '#3b82f6' : '#0284c7'} />
+            <pointLight position={[0, -1, 2]} intensity={1.5} color={isLight ? '#6366f1' : '#00f3ff'} />
+            <pointLight position={[3, 2, 2]} intensity={1.8} color="#8b5cf6" />
+            
+            {/* Centered 3D Neural Orb */}
+            <group position={[0, 0.15, 0]}>
+              <Orb mode={mode} audioLevel={audioLevel} mouse={mouseRef} clicked={isListening} scale={0.9} />
+              {/* Multi-tiered Glowing Ring Pedestal under Orb */}
+              <group position={[0, -1.15, 0]}>
+                <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                  <cylinderGeometry args={[1.2, 1.45, 0.15, 64]} />
+                  <meshStandardMaterial color={isLight ? '#cbd5e1' : '#050b14'} roughness={0.2} metalness={0.9} />
+                </mesh>
+                <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+                  <ringGeometry args={[0.85, 1.15, 64]} />
+                  <meshBasicMaterial color="#8b5cf6" transparent opacity={0.85} />
+                </mesh>
+              </group>
+            </group>
+
+            <EffectComposer>
+              <Bloom intensity={isLight ? 0.8 : 1.3} luminanceThreshold={0.2} luminanceSmoothing={0.9} mipmapBlur />
+              <ChromaticAberration blendFunction={BlendFunction.NORMAL} offset={[0.0005, 0.0005]} />
+              <Vignette eskil={false} offset={0.3} darkness={isLight ? 0.3 : 0.8} />
+            </EffectComposer>
+          </Suspense>
+        </Canvas>
+      </div>
+
+      {/* Click Ripples */}
+      {ripples.map((r) => (
+        <Ripple key={r.id} x={r.x} y={r.y} id={r.id} />
+      ))}
+
+      {/* Sidebar Navigation */}
       <Sidebar />
 
-      <main className="flex-1 flex flex-col h-screen overflow-hidden relative z-10">
-        {/* Top Navigation */}
-        <TopNavigation isListening={isListening} isSpeaking={isSpeaking} extraControls={extraControls} />
-
-        {/* Chat area */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto chat-scroll px-4 md:px-8 py-6 pb-40 md:pb-6">
-          {messages.length === 0 ? (
-            <EmptyState
-              isSupported={isSupported}
-              onSelectPrompt={(text) => handleSend(text)}
-              orbState={orbState}
-              onOrbClick={handleMicClick}
-            />
-          ) : (
-            <div className="max-w-3xl mx-auto space-y-6">
-              {messages.map((m) => (
-                <ChatBubble
-                  key={m.id}
-                  id={m.id}
-                  role={m.role}
-                  content={m.content}
-                  onCopy={() => handleCopy(m.id, m.content)}
-                  isCopied={copiedId === m.id}
-                  onSpeak={() => speak(m.content)}
-                  isTTSSupported={isTTSSupported}
-                />
-              ))}
-              {sending && <TypingBubble />}
+      {/* Main Content Viewport */}
+      <motion.div
+        className="relative z-20 flex-1 flex flex-col h-screen overflow-hidden"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: bootDone ? 1 : 0 }}
+        transition={{ duration: 0.8 }}
+      >
+        {/* Top Header Navigation */}
+        <div className={`border-b backdrop-blur-xl px-6 py-2.5 flex items-center justify-between gap-4 transition-colors ${
+          isLight ? 'border-slate-200 bg-white/85 text-slate-800' : 'border-white/10 bg-slate-950/80 text-white'
+        }`}>
+          {speechError && (
+            <div className="absolute top-16 left-6 right-6 z-50 p-3 bg-red-500/90 text-white rounded-xl shadow-xl flex items-center justify-between text-xs backdrop-blur-md animate-fade-in border border-red-400/30">
+              <div className="flex items-center gap-2 pr-4">
+                <span className="text-base">⚠️</span>
+                <span>{speechError}</span>
+              </div>
+              <button
+                onClick={() => setSpeechError(null)}
+                className="px-2 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-white font-semibold transition"
+              >
+                Dismiss
+              </button>
             </div>
           )}
-        </div>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-600 flex items-center justify-center font-bold text-white shadow-lg text-sm font-display">
+              AI
+            </div>
+            <div>
+              <div className={`text-sm font-bold flex items-center gap-2 font-display ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                AI Buddy
+                <span className={`text-[10px] font-normal ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Voice Assistant</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-emerald-500 font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Online & Ready
+              </div>
+            </div>
+          </div>
 
-        {/* Composer */}
-        <div className="border-t border-white/10 px-4 md:px-8 py-4 pb-20 md:pb-5 bg-slate-950/80 backdrop-blur-xl">
-          <div className="max-w-3xl mx-auto flex items-center gap-3">
-            <div className="flex-1 flex items-center gap-3 bg-slate-900/90 border border-white/15 rounded-2xl px-4 py-3 shadow-inner focus-within:border-brand-500/60 focus-within:ring-2 focus-within:ring-brand-500/20 transition-all">
-              <textarea
-                ref={textareaRef}
-                rows={1}
-                value={inputText}
-                onChange={(e) => {
-                  setInputText(e.target.value)
-                  e.target.style.height = 'auto'
-                  e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    handleSend()
-                  }
-                }}
-                placeholder={isListening ? 'Listening to voice input...' : 'Type a message or use voice...'}
-                className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none resize-none max-h-28 min-h-[24px] py-1 leading-relaxed"
-              />
+          {/* Search Bar */}
+          <div className={`hidden md:flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs border w-72 focus-within:border-indigo-500 shadow-inner transition-colors ${
+            isLight ? 'bg-slate-100 border-slate-200 text-slate-800' : 'bg-slate-900/90 border-white/15 text-slate-300'
+          }`}>
+            <Search className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Search anything..."
+              className={`bg-transparent outline-none flex-1 text-xs font-mono ${isLight ? 'text-slate-900 placeholder:text-slate-400' : 'text-white placeholder:text-slate-500'}`}
+            />
+            <kbd className={`px-1.5 py-0.5 rounded text-[9px] font-mono ${isLight ? 'bg-slate-200 text-slate-600' : 'bg-white/10 text-slate-400'}`}>Ctrl K</kbd>
+          </div>
 
-              {/* Inline Microphone Action Button */}
-              <button
-                onClick={handleMicClick}
-                disabled={!isSupported}
-                className={`p-2 rounded-xl transition-all duration-200 shrink-0 ${
-                  isListening
-                    ? 'text-pink-400 bg-pink-500/20 animate-pulse ring-1 ring-pink-500/40'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                }`}
-                title={isListening ? 'Stop listening' : 'Toggle Voice Recording'}
-              >
-                <MicIcon className="h-4 w-4" />
+          {/* Right Header Badges */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleTheme}
+              title={`Switch to ${isLight ? 'Black (Dark Mode)' : 'White (Light Mode)'}`}
+              className={`p-2 rounded-full border transition cursor-pointer ${
+                isLight ? 'bg-amber-50 border-amber-200 text-amber-600 hover:bg-amber-100' : 'bg-white/5 border-white/10 text-slate-300 hover:text-white'
+              }`}
+            >
+              {isLight ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-indigo-400" />}
+            </button>
+
+            <button className={`p-2 rounded-full border transition ${
+              isLight ? 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200' : 'bg-white/5 border-white/10 text-slate-300 hover:text-white'
+            }`}>
+              <Settings className="w-4 h-4 text-indigo-500" />
+            </button>
+
+            <div className="relative">
+              <button className={`p-2 rounded-full border transition ${
+                isLight ? 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200' : 'bg-white/5 border-white/10 text-slate-300 hover:text-white'
+              }`}>
+                <Bell className="w-4 h-4 text-purple-500" />
               </button>
-
-              <button
-                onClick={() => handleSend()}
-                disabled={!inputText.trim() || sending}
-                className="p-2 rounded-xl bg-brand-500 hover:bg-brand-400 text-white disabled:opacity-20 disabled:hover:bg-brand-500 transition shadow-md shadow-brand-500/20 shrink-0"
-                aria-label="Send message"
-              >
-                <SendIcon className="h-4 w-4" />
-              </button>
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-indigo-600 text-[9px] font-bold text-white flex items-center justify-center shadow-md">
+                3
+              </span>
             </div>
 
-            <VoiceOrbSmall
-              state={orbState}
-              onClick={handleMicClick}
-              disabled={!isSupported}
+            <div className={`hidden lg:flex items-center gap-2 text-xs font-mono border-l pl-3 ${
+              isLight ? 'text-indigo-600 border-slate-200' : 'text-cyan-300 border-white/10'
+            }`}>
+              <Clock className="w-3.5 h-3.5 text-indigo-500" />
+              <span>{time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+            </div>
+
+            {/* Small Robot Avatar Icon */}
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 border border-indigo-400/40 p-0.5 shadow-lg flex items-center justify-center">
+              <span className="text-sm">🤖</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content Grid (3 Columns: LeftPanel, Center Globe, Right Chat) */}
+        <div className="flex-1 grid grid-cols-12 gap-4 px-6 py-3 min-h-0 overflow-hidden max-w-[1650px] mx-auto w-full">
+          {/* Left Column: Welcome Card + Quick Actions */}
+          <div className="hidden lg:block lg:col-span-3 xl:col-span-3 min-h-0 h-full">
+            <LeftPanel
+              onNewChat={() => {
+                setMessages([
+                  { id: Date.now(), role: 'ai', text: "Hello Deva! 👋 I've started a new conversation for you. How can I assist you today?" },
+                ])
+                setConversationId(null)
+              }}
+              onVoiceCommand={toggleMic}
+              onUploadDoc={() => sendMessage('Analyze my uploaded document')}
+              onSearch={() => searchInputRef.current?.focus()}
             />
           </div>
-          {!isSupported && (
-            <p className="text-center text-xs text-slate-500 mt-2 max-w-2xl mx-auto">
-              Speech-to-text isn't supported in this browser. Try Chrome or Edge, or type your message above.
-            </p>
-          )}
+
+          {/* Center Column: 3D Orb Globe Stage */}
+          <main className="col-span-12 lg:col-span-4 xl:col-span-5 flex flex-col justify-between relative min-h-0 py-2">
+            <DashboardRipples active={mode === 'listening'} />
+
+            {/* Top Waveform Header over Globe Stage */}
+            <div className="flex flex-col items-center gap-1 z-20">
+              <div className={`px-3.5 py-1 rounded-full border text-xs font-mono shadow-xl flex items-center gap-2 ${
+                isLight ? 'bg-white/90 border-indigo-200 text-indigo-700' : 'bg-slate-950/80 border-cyan-500/30 text-cyan-300'
+              }`}>
+                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+                <span>AI Listening...</span>
+              </div>
+              <div className="w-48 h-8">
+                <AudioSpectrum isActive={isListening || isSpeaking || sending} />
+              </div>
+            </div>
+
+            {/* Floating Speech Bubble over Globe */}
+            <div className="absolute top-12 left-1/2 -translate-x-1/2 max-w-xs z-20 pointer-events-none w-full px-4">
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                className={`border backdrop-blur-md px-4 py-2.5 rounded-2xl text-xs shadow-2xl leading-relaxed mx-auto ${
+                  isLight
+                    ? 'bg-white/95 border-indigo-200 text-slate-800 shadow-indigo-500/10'
+                    : 'bg-slate-900/90 border-cyan-500/40 text-cyan-100'
+                }`}
+              >
+                <div className={`text-[9px] font-mono uppercase tracking-wider mb-1 font-semibold ${
+                  isLight ? 'text-indigo-600' : 'text-cyan-400'
+                }`}>
+                  Hello Deva! 👋
+                </div>
+                {latestAiMessage}
+              </motion.div>
+            </div>
+
+            {/* Mode Action Pills under 3D Orb Stage */}
+            <div className="flex items-center justify-center gap-3 z-20 mb-2">
+              <button
+                onClick={toggleMic}
+                className={`px-4 py-2 rounded-xl text-xs font-mono transition flex items-center gap-2 border shadow-lg cursor-pointer ${
+                  mode === 'listening'
+                    ? 'bg-indigo-500/30 text-indigo-700 dark:text-cyan-300 border-indigo-400 shadow-indigo-500/20'
+                    : isLight
+                      ? 'bg-white/90 text-slate-700 border-slate-200 hover:border-indigo-400'
+                      : 'bg-slate-900/80 text-slate-300 border-white/10 hover:border-cyan-500/40'
+                }`}
+              >
+                <Mic className={`w-3.5 h-3.5 ${isLight ? 'text-indigo-600' : 'text-cyan-400'}`} />
+                Listening
+              </button>
+
+              <button
+                onClick={() => setMode('thinking')}
+                className={`px-4 py-2 rounded-xl text-xs font-mono transition flex items-center gap-2 border shadow-lg cursor-pointer ${
+                  mode === 'thinking'
+                    ? 'bg-purple-500/30 text-purple-700 dark:text-purple-300 border-purple-400 shadow-purple-500/20'
+                    : isLight
+                      ? 'bg-white/90 text-slate-700 border-slate-200 hover:border-purple-400'
+                      : 'bg-slate-900/80 text-slate-300 border-white/10 hover:border-purple-500/40'
+                }`}
+              >
+                <Brain className="w-3.5 h-3.5 text-purple-500" />
+                Thinking
+              </button>
+
+              <button
+                onClick={() => setMode('speaking')}
+                className={`px-4 py-2 rounded-xl text-xs font-mono transition flex items-center gap-2 border shadow-lg cursor-pointer ${
+                  mode === 'speaking'
+                    ? 'bg-blue-500/30 text-blue-700 dark:text-blue-300 border-blue-400 shadow-blue-500/20'
+                    : isLight
+                      ? 'bg-white/90 text-slate-700 border-slate-200 hover:border-blue-400'
+                      : 'bg-slate-900/80 text-slate-300 border-white/10 hover:border-blue-500/40'
+                }`}
+              >
+                <Waves className="w-3.5 h-3.5 text-blue-500" />
+                Speaking
+              </button>
+            </div>
+          </main>
+
+          {/* Right Chat Panel */}
+          <motion.aside
+            initial={{ opacity: 0, x: 25 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6 }}
+            className="col-span-12 lg:col-span-5 xl:col-span-4 flex flex-col gap-3 min-h-0 h-full"
+          >
+            {/* Top Web Shortcuts Row */}
+            <div className="flex items-center gap-2 overflow-x-auto chat-scroll py-1 shrink-0">
+              {WEB_SHORTCUTS.map((item) => (
+                <a
+                  key={item.name}
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`px-3 py-1.5 rounded-xl border transition flex items-center gap-1.5 text-xs shrink-0 shadow-md ${
+                    isLight
+                      ? 'bg-white/90 border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                      : 'bg-slate-900/80 border-white/10 text-slate-200 hover:text-white hover:bg-slate-800/90'
+                  }`}
+                >
+                  <span>{item.icon}</span>
+                  <span className="font-mono text-[11px]">{item.name}</span>
+                </a>
+              ))}
+              <button className={`w-7 h-7 rounded-xl border flex items-center justify-center shrink-0 ${
+                isLight ? 'bg-white/90 border-slate-200 text-slate-500 hover:text-slate-900' : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+              }`}>
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Chat Box Panel */}
+            <div className={`rounded-2xl p-4 flex-1 min-h-0 flex flex-col relative shadow-2xl border transition-colors ${
+              isLight ? 'bg-white/90 border-slate-200 shadow-indigo-500/5' : 'glass-panel border-white/15 bg-slate-950/70'
+            }`}>
+              <div ref={chatScrollRef} className="flex-1 overflow-y-auto chat-scroll space-y-3.5 pr-1">
+                <AnimatePresence initial={false}>
+                  {messages.map((msg) => (
+                    <motion.div
+                      key={msg.id}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed shadow-lg ${
+                          msg.role === 'user'
+                            ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-br-none'
+                            : isLight
+                              ? 'bg-slate-100 border border-slate-200 text-slate-800 rounded-bl-none'
+                              : 'bg-slate-900/95 border border-cyan-500/30 text-cyan-100 rounded-bl-none'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3 text-[9px] font-mono uppercase tracking-wider mb-1 opacity-70">
+                          <span>{msg.role === 'user' ? 'You' : 'AI Buddy'}</span>
+                          <span>10:51 AM</span>
+                        </div>
+                        <div>{msg.text}</div>
+                        {msg.role === 'ai' && msg.text.includes('http') && (
+                          <a
+                            href={msg.text.match(/https?:\/\/[^\s]+/)?.[0]}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-mono transition ${
+                              isLight
+                                ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
+                                : 'bg-cyan-500/20 border-cyan-400/40 text-cyan-300 hover:bg-cyan-500/30'
+                            }`}
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            Open Now
+                          </a>
+                        )}
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+
+                {sending && (
+                  <div className={`flex items-center gap-2 text-xs font-mono animate-pulse px-3 py-2 rounded-xl w-max border ${
+                    isLight ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-900/80 border-cyan-500/20 text-cyan-400'
+                  }`}>
+                    <span className="flex gap-1">
+                      <span className={`w-1.5 h-1.5 rounded-full animate-bounce ${isLight ? 'bg-indigo-600' : 'bg-cyan-400'}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:0.2s] ${isLight ? 'bg-indigo-600' : 'bg-cyan-400'}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full animate-bounce [animation-delay:0.4s] ${isLight ? 'bg-indigo-600' : 'bg-cyan-400'}`} />
+                    </span>
+                    <span>AI Buddy is responding...</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Composer Input Bar */}
+              <div className={`mt-3 pt-2 border-t flex items-center gap-2 ${isLight ? 'border-slate-200' : 'border-white/10'}`}>
+                <div className={`flex-1 border focus-within:border-indigo-500 rounded-2xl px-3.5 py-2 flex items-center gap-2 shadow-inner transition-colors ${
+                  isLight ? 'bg-slate-100 border-slate-300' : 'bg-slate-900/90 border-white/15'
+                }`}>
+                  <input
+                    ref={textareaRef}
+                    type="text"
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        sendMessage()
+                      }
+                    }}
+                    placeholder="Type a message or ask anything..."
+                    className={`flex-1 bg-transparent text-xs outline-none font-mono ${
+                      isLight ? 'text-slate-900 placeholder:text-slate-400' : 'text-white placeholder:text-slate-500'
+                    }`}
+                  />
+                  <button
+                    onClick={toggleMic}
+                    className={`p-1.5 rounded-xl transition cursor-pointer ${
+                      isListening
+                        ? 'text-pink-500 bg-pink-500/20 animate-pulse'
+                        : isLight
+                          ? 'text-slate-400 hover:text-indigo-600'
+                          : 'text-slate-400 hover:text-cyan-300'
+                    }`}
+                    title="Voice Mic"
+                  >
+                    {isListening ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => sendMessage()}
+                  disabled={!inputText.trim() || sending}
+                  className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white disabled:opacity-30 transition flex items-center justify-center shadow-lg shrink-0 hover:scale-105 active:scale-95 cursor-pointer"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </motion.aside>
         </div>
-      </main>
+
+        {/* Bottom Dashboard Grid Widgets */}
+        <AnimatePresence>
+          {showWidgets && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.4 }}
+              className={`border-t backdrop-blur-xl px-6 py-2.5 overflow-x-auto chat-scroll shadow-2xl shrink-0 z-20 transition-colors ${
+                isLight ? 'border-slate-200 bg-white/90 text-slate-800' : 'border-white/10 bg-slate-950/80 text-white'
+              }`}
+            >
+              <Widgets onSelectPrompt={(text) => sendMessage(text)} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
 
       <MobileNav />
     </div>
   )
 }
-
-function VoiceOrbSmall({ state, onClick, disabled }) {
-  return (
-    <div className="shrink-0">
-      <VoiceOrb size={48} state={state} onClick={onClick} disabled={disabled} />
-    </div>
-  )
-}
-
-function EmptyState({ isSupported, onSelectPrompt, orbState, onOrbClick }) {
-  const promptSuggestions = [
-    { title: '⏰ Current Time & Date', text: 'What is the current time and date?' },
-    { title: '😄 Tell Me a Joke', text: 'Tell me a programming joke' },
-    { title: '🎧 Music Recommendation', text: 'Recommend some good focus music' },
-    { title: '📡 Daily News Update', text: 'What is the news today?' },
-    { title: '💡 Brainstorm Ideas', text: 'Give me 5 creative ideas for a voice assistant app' },
-    { title: '✨ Motivation Quote', text: 'Give me an inspiring quote' },
-  ]
-
-  return (
-    <div className="h-full flex flex-col items-center justify-center text-center px-4 py-8">
-      <div className="mb-6 relative">
-        <VoiceOrb state={orbState} onClick={onOrbClick} disabled={!isSupported} />
-      </div>
-
-      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-300 text-xs font-medium mb-3">
-        <span className="h-1.5 w-1.5 rounded-full bg-brand-400 animate-ping" />
-        Voice-first Intelligence
-      </div>
-
-      <h2 className="font-display text-2xl md:text-3xl font-extrabold text-white tracking-tight">
-        How can I help you today?
-      </h2>
-      <p className="text-slate-400 text-sm mt-2 max-w-md leading-relaxed">
-        {isSupported
-          ? 'Tap the microphone orb to speak naturally, or pick a prompt suggestion below.'
-          : 'Type your prompt in the box below to start chatting.'}
-      </p>
-
-      {/* Suggestion cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-8 max-w-xl w-full">
-        {promptSuggestions.map((item, idx) => (
-          <button
-            key={idx}
-            onClick={() => onSelectPrompt(item.text)}
-            className="text-left p-3.5 rounded-xl bg-slate-900/60 hover:bg-slate-800/80 border border-white/10 hover:border-brand-500/40 transition-all duration-200 group flex flex-col justify-between"
-          >
-            <span className="text-xs font-semibold text-white group-hover:text-brand-300 transition">
-              {item.title}
-            </span>
-            <span className="text-xs text-slate-400 line-clamp-2 mt-1 font-light">
-              "{item.text}"
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function ChatBubble({ id, role, content, onCopy, isCopied, onSpeak, isTTSSupported }) {
-  const isUser = role === 'user'
-  return (
-    <div className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'} group`}>
-      {!isUser && (
-        <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md shadow-brand-500/20">
-          AI
-        </div>
-      )}
-      <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[85%]`}>
-        <div
-          className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-            isUser
-              ? 'bg-gradient-to-r from-brand-600 to-indigo-600 text-white rounded-br-xs shadow-md shadow-brand-500/10'
-              : 'bg-slate-900/90 border border-white/10 text-slate-100 rounded-bl-xs shadow-lg shadow-black/20 backdrop-blur-sm'
-          }`}
-        >
-          {content}
-        </div>
-
-        {/* Message Actions */}
-        {!isUser && (
-          <div className="flex items-center gap-2 mt-1.5 px-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-            <button
-              onClick={onCopy}
-              className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded transition"
-              title="Copy text"
-            >
-              {isCopied ? (
-                <>
-                  <CheckIcon className="h-3 w-3 text-emerald-400" />
-                  <span className="text-emerald-400">Copied</span>
-                </>
-              ) : (
-                <>
-                  <CopyIcon className="h-3 w-3" />
-                  <span>Copy</span>
-                </>
-              )}
-            </button>
-            {isTTSSupported && (
-              <button
-                onClick={onSpeak}
-                className="text-xs text-slate-400 hover:text-brand-300 flex items-center gap-1 bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded transition"
-                title="Speak message aloud"
-              >
-                <VolumeIcon className="h-3 w-3" />
-                <span>Speak</span>
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-      {isUser && (
-        <div className="h-8 w-8 rounded-xl bg-slate-800 border border-white/10 flex items-center justify-center text-slate-300 font-medium text-xs shrink-0">
-          You
-        </div>
-      )}
-    </div>
-  )
-}
-
-function TypingBubble() {
-  return (
-    <div className="flex gap-3 justify-start items-center">
-      <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-md">
-        AI
-      </div>
-      <div className="bg-slate-900/90 border border-white/10 rounded-2xl rounded-bl-xs px-4 py-3 flex items-center gap-2">
-        <span className="text-xs text-slate-400 font-medium">Assistant thinking</span>
-        <div className="flex gap-1">
-          {[0, 1, 2].map((i) => (
-            <span
-              key={i}
-              className="h-1.5 w-1.5 rounded-full bg-brand-400 animate-bounce"
-              style={{ animationDelay: `${i * 0.15}s` }}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function SendIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
-      <path d="M22 2 11 13" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M22 2 15 22l-4-9-9-4 20-7Z" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function CopyIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
-      <rect x="9" y="9" width="13" height="13" rx="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function CheckIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" {...props}>
-      <polyline points="20 6 9 17 4 12" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function VolumeIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
-      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function TrashIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
-      <path d="M3 6h18" strokeLinecap="round" />
-      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" strokeLinecap="round" />
-      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function SparklesIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
-      <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M5 3v4" strokeLinecap="round" />
-      <path d="M19 17v4" strokeLinecap="round" />
-      <path d="M3 5h4" strokeLinecap="round" />
-      <path d="M17 19h4" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function SoundWaveIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
-      <path d="M2 10v4" strokeLinecap="round" />
-      <path d="M6 6v12" strokeLinecap="round" />
-      <path d="M10 3v18" strokeLinecap="round" />
-      <path d="M14 7v10" strokeLinecap="round" />
-      <path d="M18 9v6" strokeLinecap="round" />
-      <path d="M22 11v2" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function MicIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-      <line x1="12" y1="19" x2="12" y2="23" />
-      <line x1="8" y1="23" x2="16" y2="23" />
-    </svg>
-  )
-}
-
-
-

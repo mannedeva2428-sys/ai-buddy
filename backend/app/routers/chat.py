@@ -29,28 +29,34 @@ def message_to_out(doc: dict) -> ChatMessageOut:
 async def send_message(payload: ChatMessageCreate, current_user: dict = Depends(get_current_user)):
     user_id = str(current_user["_id"])
     conversation_id = payload.conversation_id or str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
 
-    # Save the user's message
+    user_msg_id = str(uuid.uuid4())
     user_msg_doc = {
         "user_id": user_id,
         "conversation_id": conversation_id,
         "role": "user",
         "content": payload.message,
-        "created_at": datetime.now(timezone.utc),
+        "created_at": now,
     }
-    user_result = await chats_collection.insert_one(user_msg_doc)
-    user_msg_doc["_id"] = user_result.inserted_id
 
-    # Load recent history for this conversation (for AI context)
-    history_cursor = chats_collection.find(
-        {"user_id": user_id, "conversation_id": conversation_id}
-    ).sort("created_at", 1)
-    history_docs = await history_cursor.to_list(length=50)
-    history = [{"role": d["role"], "content": d["content"]} for d in history_docs]
+    history = []
+    try:
+        user_result = await chats_collection.insert_one(user_msg_doc)
+        user_msg_id = str(user_result.inserted_id)
+
+        history_cursor = chats_collection.find(
+            {"user_id": user_id, "conversation_id": conversation_id}
+        ).sort("created_at", 1)
+        history_docs = await history_cursor.to_list(length=50)
+        history = [{"role": d["role"], "content": d["content"]} for d in history_docs]
+    except Exception as e:
+        print(f"MongoDB warning (user message): {e}")
 
     # Generate the AI reply
     ai_text = await generate_ai_reply(payload.message, history)
 
+    ai_msg_id = str(uuid.uuid4())
     ai_msg_doc = {
         "user_id": user_id,
         "conversation_id": conversation_id,
@@ -58,10 +64,30 @@ async def send_message(payload: ChatMessageCreate, current_user: dict = Depends(
         "content": ai_text,
         "created_at": datetime.now(timezone.utc),
     }
-    ai_result = await chats_collection.insert_one(ai_msg_doc)
-    ai_msg_doc["_id"] = ai_result.inserted_id
 
-    return [message_to_out(user_msg_doc), message_to_out(ai_msg_doc)]
+    try:
+        ai_result = await chats_collection.insert_one(ai_msg_doc)
+        ai_msg_id = str(ai_result.inserted_id)
+    except Exception as e:
+        print(f"MongoDB warning (ai message): {e}")
+
+    return [
+        ChatMessageOut(
+            id=user_msg_id,
+            conversation_id=conversation_id,
+            role="user",
+            content=payload.message,
+            created_at=now,
+        ),
+        ChatMessageOut(
+            id=ai_msg_id,
+            conversation_id=conversation_id,
+            role="assistant",
+            content=ai_text,
+            created_at=datetime.now(timezone.utc),
+        ),
+    ]
+
 
 
 @router.get("/conversations", response_model=list[ConversationSummary])

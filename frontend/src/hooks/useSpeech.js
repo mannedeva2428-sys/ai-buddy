@@ -15,6 +15,7 @@ export function useSpeech() {
   const [isListening, setIsListening] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [transcript, setTranscript] = useState('')
+  const [error, setError] = useState(null)
   const recognitionRef = useRef(null)
 
   const SpeechRecognition =
@@ -23,6 +24,11 @@ export function useSpeech() {
 
   const isSupported = Boolean(SpeechRecognition)
   const isTTSSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
+  const isSecureOrigin =
+    typeof window !== 'undefined' &&
+    (window.location.protocol === 'https:' ||
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1')
 
   useEffect(() => {
     if (!isSupported) return
@@ -32,9 +38,21 @@ export function useSpeech() {
     recognition.interimResults = true
     recognition.lang = 'en-US'
 
-    recognition.onstart = () => setIsListening(true)
+    recognition.onstart = () => {
+      setIsListening(true)
+      setError(null)
+    }
     recognition.onend = () => setIsListening(false)
-    recognition.onerror = () => setIsListening(false)
+    recognition.onerror = (event) => {
+      setIsListening(false)
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        setError(
+          'Microphone permission blocked. On non-localhost HTTP, Chrome requires allowing microphone permissions in site settings or configuring chrome://flags/#unsafely-treat-insecure-origin-as-secure.'
+        )
+      } else if (event.error !== 'no-speech') {
+        setError(`Speech recognition issue: ${event.error}`)
+      }
+    }
 
     recognition.onresult = (event) => {
       let finalText = ''
@@ -52,10 +70,23 @@ export function useSpeech() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSupported])
 
-  const listen = useCallback(() => {
+  const listen = useCallback(async () => {
     if (!isSupported || isListening) return
+    setError(null)
     setTranscript('')
-    recognitionRef.current?.start()
+
+    try {
+      if (navigator?.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        stream.getTracks().forEach((track) => track.stop())
+      }
+      recognitionRef.current?.start()
+    } catch (err) {
+      console.error('Microphone permission error:', err)
+      setError(
+        'Microphone permission denied! Please tap the lock icon next to the URL bar, allow Microphone access, and refresh.'
+      )
+    }
   }, [isSupported, isListening])
 
   const stopListening = useCallback(() => {
@@ -66,7 +97,8 @@ export function useSpeech() {
     (text) => {
       if (!isTTSSupported || !text) return
       window.speechSynthesis.cancel()
-      const utterance = new SpeechSynthesisUtterance(text)
+      const cleanText = text.replace(/\*\*/g, '')
+      const utterance = new SpeechSynthesisUtterance(cleanText)
       utterance.rate = 1
       utterance.pitch = 1
       utterance.onstart = () => setIsSpeaking(true)
@@ -87,9 +119,12 @@ export function useSpeech() {
   return {
     isSupported,
     isTTSSupported,
+    isSecureOrigin,
     isListening,
     isSpeaking,
     transcript,
+    error,
+    setError,
     setTranscript,
     listen,
     stopListening,
