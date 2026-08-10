@@ -12,6 +12,7 @@ import calendar
 import re
 from datetime import datetime
 from app.config import settings
+from app.utils.weather import extract_city, fetch_real_weather, format_weather_text
 
 OWNER_NAME = "Deva"
 
@@ -390,10 +391,16 @@ def _rule_based_reply(message: str) -> str:
 
 async def generate_ai_reply(message: str, history: list) -> str:
     """
-    Generate assistant reply. Checks if OPENAI_API_KEY or GEMINI_API_KEY is configured in backend/.env,
-    otherwise uses the built-in advanced command engine.
+    Generate assistant reply. Checks for live tools (Weather, Apps, Math), LLMs (OpenAI & Gemini),
+    and built-in fallback command engine.
     """
     import httpx
+
+    # Handle weather intent with live data
+    if _has_word(message, "weather", "forecast"):
+        city = extract_city(message)
+        weather_data = await fetch_real_weather(city)
+        return format_weather_text(weather_data)
 
     # 1. OpenAI API
     if settings.OPENAI_API_KEY:

@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends, status
 
-from app.database import get_database
+from app.database import database
 from app.schemas.widgets import (
     TaskCreate,
     TaskUpdate,
@@ -16,7 +16,8 @@ from app.schemas.widgets import (
     WebShortcut,
     SuggestionItem,
 )
-from app.utils.deps import get_optional_user
+from app.utils.deps import get_current_user
+from app.utils.weather import fetch_real_weather
 
 router = APIRouter(prefix="/api/widgets", tags=["Widgets"])
 
@@ -48,11 +49,10 @@ DEFAULT_SUGGESTIONS = [
 
 # ─── Tasks Endpoints ──────────────────────────────────────────
 @router.get("/tasks", response_model=List[TaskOut])
-async def get_tasks(user=Depends(get_optional_user)):
-    db = get_database()
-    if db is not None and user is not None:
+async def get_tasks(user=Depends(get_current_user)):
+    if database is not None and user is not None:
         user_id = str(user.get("_id", "anonymous"))
-        cursor = db.tasks.find({"user_id": user_id})
+        cursor = database.tasks.find({"user_id": user_id})
         tasks = []
         async for doc in cursor:
             tasks.append(
@@ -71,9 +71,8 @@ async def get_tasks(user=Depends(get_optional_user)):
 
 
 @router.post("/tasks", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
-async def create_task(payload: TaskCreate, user=Depends(get_optional_user)):
+async def create_task(payload: TaskCreate, user=Depends(get_current_user)):
     task_id = f"t-{uuid.uuid4().hex[:8]}"
-    db = get_database()
     new_task = {
         "id": task_id,
         "title": payload.title,
@@ -82,18 +81,16 @@ async def create_task(payload: TaskCreate, user=Depends(get_optional_user)):
         "created_at": datetime.utcnow(),
     }
 
-    if db is not None and user is not None:
+    if database is not None and user is not None:
         new_task["user_id"] = str(user.get("_id", "anonymous"))
-        res = await db.tasks.insert_one(new_task)
+        res = await database.tasks.insert_one(new_task)
         new_task["id"] = str(res.inserted_id)
 
     return TaskOut(**new_task)
 
 
 @router.patch("/tasks/{task_id}", response_model=TaskOut)
-async def update_task(task_id: str, payload: TaskUpdate, user=Depends(get_optional_user)):
-    db = get_database()
-
+async def update_task(task_id: str, payload: TaskUpdate, user=Depends(get_current_user)):
     # Search in default tasks first as fallback
     for t in DEFAULT_TASKS:
         if t["id"] == task_id:
@@ -105,7 +102,7 @@ async def update_task(task_id: str, payload: TaskUpdate, user=Depends(get_option
                 t["time"] = payload.time
             return TaskOut(**t)
 
-    if db is not None:
+    if database is not None:
         update_data = {}
         if payload.completed is not None:
             update_data["completed"] = payload.completed
@@ -115,8 +112,8 @@ async def update_task(task_id: str, payload: TaskUpdate, user=Depends(get_option
             update_data["time"] = payload.time
 
         if update_data:
-            await db.tasks.update_one({"_id": task_id}, {"$set": update_data})
-            doc = await db.tasks.find_one({"_id": task_id})
+            await database.tasks.update_one({"_id": task_id}, {"$set": update_data})
+            doc = await database.tasks.find_one({"_id": task_id})
             if doc:
                 return TaskOut(
                     id=str(doc.get("_id")),
@@ -129,13 +126,12 @@ async def update_task(task_id: str, payload: TaskUpdate, user=Depends(get_option
 
 
 @router.delete("/tasks/{task_id}")
-async def delete_task(task_id: str, user=Depends(get_optional_user)):
+async def delete_task(task_id: str, user=Depends(get_current_user)):
     global DEFAULT_TASKS
     DEFAULT_TASKS = [t for t in DEFAULT_TASKS if t["id"] != task_id]
 
-    db = get_database()
-    if db is not None:
-        await db.tasks.delete_one({"_id": task_id})
+    if database is not None:
+        await database.tasks.delete_one({"_id": task_id})
 
     return {"message": "Task deleted successfully", "id": task_id}
 
@@ -143,22 +139,8 @@ async def delete_task(task_id: str, user=Depends(get_optional_user)):
 # ─── Weather Endpoint ─────────────────────────────────────────
 @router.get("/weather", response_model=WeatherOut)
 async def get_weather(city: Optional[str] = "Bangalore"):
-    return WeatherOut(
-        city=city or "Bangalore",
-        country="India",
-        temp_celsius=26,
-        condition="Mostly Cloudy",
-        humidity_percent=64,
-        high_temp=28,
-        low_temp=21,
-        forecast=[
-          {"day": "Mon", "temp": 24, "condition": "Sun"},
-          {"day": "Tue", "temp": 26, "condition": "Sun"},
-          {"day": "Wed", "temp": 23, "condition": "Cloud"},
-          {"day": "Thu", "temp": 25, "condition": "Sun"},
-          {"day": "Fri", "temp": 22, "condition": "Cloud"},
-        ],
-    )
+    weather_data = await fetch_real_weather(city or "Bangalore")
+    return WeatherOut(**weather_data)
 
 
 # ─── Analytics Endpoint ───────────────────────────────────────

@@ -8,6 +8,8 @@ node_modules/
 .env
 *.env
 !.env.example
+cert/
+*.pem
 
 # Python cache & build outputs
 __pycache__/

@@ -47,4 +47,11 @@ export const chatAPI = {
   deleteConversation: (conversationId) => api.delete(`/api/chat/conversations/${conversationId}`),
 }
 
+export const widgetsAPI = {
+  getWeather: (city = 'Bangalore') => api.get('/api/widgets/weather', { params: { city } }),
+  getAnalytics: () => api.get('/api/widgets/analytics'),
+  getShortcuts: () => api.get('/api/widgets/shortcuts'),
+  getSuggestions: () => api.get('/api/widgets/suggestions'),
+}
+
 export default api

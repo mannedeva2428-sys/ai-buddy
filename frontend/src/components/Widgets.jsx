@@ -3,6 +3,9 @@ import { motion } from 'framer-motion'
 import {
   Sun,
   Cloud,
+  CloudRain,
+  CloudSnow,
+  CloudLightning,
   Clock,
   Sparkles,
   CheckCircle2,
@@ -10,49 +13,154 @@ import {
   Activity,
   TrendingUp,
   Lightbulb,
+  Search,
+  RefreshCw,
 } from 'lucide-react'
 import { useTheme } from '../context/ThemeContext'
+import { widgetsAPI } from '../services/api'
 
 const STAGGER = 0.06
 const BASE_DELAY = 0.3
+
+function getWeatherIcon(condition = '') {
+  const cond = condition.toLowerCase()
+  if (cond.includes('rain') || cond.includes('drizzle')) return CloudRain
+  if (cond.includes('snow') || cond.includes('ice') || cond.includes('sleet')) return CloudSnow
+  if (cond.includes('thunder') || cond.includes('storm')) return CloudLightning
+  if (cond.includes('cloud') || cond.includes('overcast')) return Cloud
+  return Sun
+}
 
 // ─── Weather Widget ──────────────────────────────────────────
 function WeatherWidget() {
   const { theme } = useTheme()
   const isLight = theme === 'light'
-  const days = [
-    { d: 'Mon', t: 24, icon: Sun },
-    { d: 'Tue', t: 26, icon: Sun },
-    { d: 'Wed', t: 23, icon: Cloud },
-    { d: 'Thu', t: 25, icon: Sun },
-    { d: 'Fri', t: 22, icon: Cloud },
-  ]
+  const [city, setCity] = useState('Bangalore')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [weather, setWeather] = useState({
+    city: 'Bangalore',
+    country: 'India',
+    temp_celsius: 26,
+    condition: 'Mostly Sunny',
+    humidity_percent: 64,
+    high_temp: 28,
+    low_temp: 21,
+    forecast: [
+      { day: 'Mon', temp: 24, condition: 'Sunny' },
+      { day: 'Tue', temp: 26, condition: 'Sunny' },
+      { day: 'Wed', temp: 23, condition: 'Cloudy' },
+      { day: 'Thu', temp: 25, condition: 'Sunny' },
+      { day: 'Fri', temp: 22, condition: 'Cloudy' },
+    ],
+  })
+
+  const loadWeather = async (targetCity) => {
+    setLoading(true)
+    try {
+      const res = await widgetsAPI.getWeather(targetCity)
+      if (res.data) {
+        setWeather(res.data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch weather:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadWeather(city)
+  }, [city])
+
+  const handleSearch = (e) => {
+    e.preventDefault()
+    if (searchQuery.trim()) {
+      setCity(searchQuery.trim())
+      setIsSearching(false)
+      setSearchQuery('')
+    }
+  }
+
+  const MainIcon = getWeatherIcon(weather.condition)
+
   return (
     <WidgetShell delay={BASE_DELAY} title="Weather" icon={Sun} accent="#fbbf24">
+      <div className="flex items-center justify-between mb-2 text-xs">
+        <div className="flex items-center gap-1.5 font-medium text-amber-400">
+          <span>{weather.city}{weather.country ? `, ${weather.country}` : ''}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setIsSearching(!isSearching)}
+            className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white transition"
+            title="Change City"
+          >
+            <Search className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => loadWeather(city)}
+            className={`p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white transition ${loading ? 'animate-spin' : ''}`}
+            title="Refresh Weather"
+          >
+            <RefreshCw className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+
+      {isSearching && (
+        <form onSubmit={handleSearch} className="mb-3 flex gap-1">
+          <input
+            type="text"
+            placeholder="Enter city (e.g. Tokyo)..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="flex-1 px-2 py-1 text-xs bg-slate-900/60 border border-amber-500/30 rounded text-white focus:outline-none focus:border-amber-400"
+            autoFocus
+          />
+          <button
+            type="submit"
+            className="px-2.5 py-1 text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold rounded transition"
+          >
+            Go
+          </button>
+        </form>
+      )}
+
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <div className="relative">
-            <Sun className="w-8 h-8 text-amber-400" />
-            <Cloud className="w-4 h-4 text-slate-400 absolute -bottom-1 -right-1" />
+            <MainIcon className="w-8 h-8 text-amber-400" />
           </div>
           <div>
-            <div className={`text-xl font-bold font-display ${isLight ? 'text-slate-900' : 'text-white'}`}>26°C</div>
-            <div className={`text-[10px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Mostly Sunny</div>
+            <div className={`text-xl font-bold font-display ${isLight ? 'text-slate-900' : 'text-white'}`}>
+              {weather.temp_celsius}°C
+            </div>
+            <div className={`text-[10px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+              {weather.condition}
+            </div>
           </div>
         </div>
         <div className="text-right text-[10px] text-slate-500 font-mono">
-          <div>H:28° L:21°</div>
-          <div>Humidity 64%</div>
+          <div>H:{weather.high_temp}° L:{weather.low_temp}°</div>
+          <div>Humidity {weather.humidity_percent}%</div>
         </div>
       </div>
+
       <div className="flex justify-between pt-1 border-t border-white/5">
-        {days.map(({ d, t, icon: Icon }) => (
-          <div key={d} className="flex flex-col items-center gap-0.5">
-            <span className="text-[9px] text-slate-500 font-mono">{d}</span>
-            <Icon className="w-3 h-3 text-amber-400/80" />
-            <span className={`text-[10px] font-mono ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>{t}°</span>
-          </div>
-        ))}
+        {(weather.forecast || []).map(({ day, temp, condition }, idx) => {
+          const DayIcon = getWeatherIcon(condition)
+          return (
+            <div key={idx} className="flex flex-col items-center gap-0.5">
+              <span className="text-[9px] text-slate-500 font-mono">{day}</span>
+              <DayIcon className="w-3 h-3 text-amber-400/80" />
+              <span className={`text-[10px] font-mono ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                {temp}°
+              </span>
+            </div>
+          )
+        })}
       </div>
     </WidgetShell>
   )

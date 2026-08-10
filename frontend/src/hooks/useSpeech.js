@@ -75,6 +75,13 @@ export function useSpeech() {
     setError(null)
     setTranscript('')
 
+    if (!isSecureOrigin) {
+      setError(
+        'Microphone is blocked because you connected via HTTP on an IP address. Browsers require HTTPS or chrome://flags for microphone access over network IP.'
+      )
+      return
+    }
+
     try {
       if (navigator?.mediaDevices?.getUserMedia) {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -87,7 +94,7 @@ export function useSpeech() {
         'Microphone permission denied! Please tap the lock icon next to the URL bar, allow Microphone access, and refresh.'
       )
     }
-  }, [isSupported, isListening])
+  }, [isSupported, isListening, isSecureOrigin])
 
   const stopListening = useCallback(() => {
     recognitionRef.current?.stop()
