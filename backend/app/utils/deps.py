@@ -12,8 +12,10 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login", auto_error=False
 
 DEFAULT_GUEST_USER = {
     "_id": ObjectId("000000000000000000000000"),
-    "username": "Deva",
+    "name": "Deva",
     "email": "deva@example.com",
+    "bio": "Guest User",
+    "avatar_color": "#6366F1",
 }
 
 

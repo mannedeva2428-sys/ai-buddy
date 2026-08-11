@@ -13,9 +13,9 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 
 def user_to_out(user: dict) -> UserOut:
     return UserOut(
-        id=str(user["_id"]),
-        name=user["name"],
-        email=user["email"],
+        id=str(user.get("_id", "")),
+        name=user.get("name", user.get("username", "User")),
+        email=user.get("email", ""),
         bio=user.get("bio", ""),
         avatar_color=user.get("avatar_color", "#6366F1"),
     )
