@@ -190,8 +190,22 @@ This project is pre-configured with `netlify.toml` and `_redirects` for seamless
    - `VITE_API_URL`: `https://your-backend-api-url.com` (URL of your deployed FastAPI backend)
 6. Click **Deploy Site**.
 
-### Backend Deployment (FastAPI + MongoDB):
-- Deploy the `backend` folder to a Python hosting platform such as **Render**, **Railway**, **Fly.io**, or **Koyeb**.
-- Set backend environment variables (`MONGO_URI`, `SECRET_KEY`, `FRONTEND_URL=https://your-app.netlify.app`).
-- MongoDB Atlas (free tier) can be used as the cloud database.
+### Deploying Backend to Render:
+
+#### Scenario A: If Root Directory on Render is set to `backend`
+- **Environment:** `Python 3`
+- **Build Command:** `pip install -r requirements.txt`
+- **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+
+#### Scenario B: If Root Directory on Render is set to Repository Root (`./`)
+- **Environment:** `Python 3`
+- **Build Command:** `pip install -r backend/requirements.txt`
+- **Start Command:** `uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port $PORT`
+
+#### Required Environment Variables on Render:
+- `PYTHON_VERSION`: `3.12.10`
+- `MONGO_URI` (or `MONGODB_URL`): `mongodb+srv://<user>:<password>@cluster0.xxxxx.mongodb.net`
+- `SECRET_KEY` (or `JWT_SECRET_KEY`): `<your_random_secret_string>`
+- `FRONTEND_URL`: `https://your-site.netlify.app`
+
 

@@ -9,10 +9,18 @@ load_dotenv()
 
 
 class Settings:
-    MONGO_URI: str = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+    MONGO_URI: str = (
+        os.getenv("MONGODB_URL")
+        or os.getenv("MONGO_URI")
+        or "mongodb://localhost:27017"
+    )
     DATABASE_NAME: str = os.getenv("DATABASE_NAME", "voice_assistant_db")
 
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "insecure_dev_secret_change_me")
+    SECRET_KEY: str = (
+        os.getenv("JWT_SECRET_KEY")
+        or os.getenv("SECRET_KEY")
+        or "insecure_dev_secret_change_me"
+    )
     ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
         os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440")
