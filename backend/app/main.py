@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import ping_database
 from app.routers import auth, user, chat, widgets, agreement
+from app.routers.auth import seed_default_user
 
 
 @asynccontextmanager
@@ -21,6 +22,7 @@ async def lifespan(app: FastAPI):
     try:
         await asyncio.wait_for(ping_database(), timeout=5.0)
         print("Connected to MongoDB successfully")
+        await seed_default_user()
     except Exception as e:
         print(
             f"Warning: Could not connect to MongoDB on startup ({e}). "
@@ -47,6 +49,8 @@ from app.config import settings
 allowed_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
     "http://localhost:5176",
     "http://127.0.0.1:5176",
 ]
@@ -60,7 +64,7 @@ if extra_origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"https://.*\.netlify\.app",
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+)(:\d+)?|https://.*\.netlify\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

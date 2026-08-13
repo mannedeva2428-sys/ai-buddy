@@ -101,3 +101,27 @@ async def refresh(current_user: dict = Depends(get_current_user)):
     new_token = create_access_token({"sub": user_id})
     return Token(access_token=new_token, user=user_to_out(current_user))
 
+
+async def seed_default_user():
+    """
+    Ensure the default demo user (deva@example.com / password123) exists in MongoDB.
+    """
+    try:
+        existing = await users_collection.find_one({"email": "deva@example.com"})
+        if not existing:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            user_doc = {
+                "name": "Deva",
+                "email": "deva@example.com",
+                "password": hash_password("password123"),
+                "bio": "AI Voice Assistant Enthusiast",
+                "avatar_color": "#6366F1",
+                "agreed_to_terms": True,
+                "agreed_at": now_iso,
+            }
+            await users_collection.insert_one(user_doc)
+            print("Seeded default demo user (deva@example.com) into MongoDB.")
+    except Exception as e:
+        print(f"Warning: Could not seed default user into MongoDB: {e}")
+
+

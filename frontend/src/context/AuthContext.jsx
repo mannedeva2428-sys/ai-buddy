@@ -11,7 +11,7 @@ export function AuthProvider({ children }) {
     const token = localStorage.getItem('token')
     const cachedUser = localStorage.getItem('user')
 
-    if (token && cachedUser) {
+    if (token && cachedUser && token !== 'null' && token !== 'undefined') {
       if (isTokenExpired(token)) {
         localStorage.removeItem('token')
         localStorage.removeItem('user')
@@ -20,7 +20,12 @@ export function AuthProvider({ children }) {
         return
       }
 
-      setUser(JSON.parse(cachedUser))
+      try {
+        setUser(JSON.parse(cachedUser))
+      } catch (e) {
+        setUser(null)
+      }
+
       // Verify the token is still valid & refresh user data in the background
       userAPI
         .getMe()
@@ -28,10 +33,12 @@ export function AuthProvider({ children }) {
           setUser(res.data)
           localStorage.setItem('user', JSON.stringify(res.data))
         })
-        .catch(() => {
-          localStorage.removeItem('token')
-          localStorage.removeItem('user')
-          setUser(null)
+        .catch((err) => {
+          if (err.response && err.response.status === 401) {
+            localStorage.removeItem('token')
+            localStorage.removeItem('user')
+            setUser(null)
+          }
         })
         .finally(() => setLoading(false))
     } else {

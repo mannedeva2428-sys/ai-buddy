@@ -42,24 +42,40 @@ export default function Login() {
       await login(form.email, form.password)
       navigate('/dashboard')
     } catch (err) {
-      // Fallback for offline / demo mode
-      const dummyUser = {
-        id: 'demo-user-123',
-        name: 'Deva',
-        email: form.email || 'deva@example.com',
-        avatar_color: '#6366f1',
+      if (err.response) {
+        if (err.response.status === 401) {
+          setError(err.response.data?.detail || 'Invalid email or password.')
+        } else {
+          setError(err.response.data?.detail || `Server error (${err.response.status}). Please try again.`)
+        }
+      } else if (err.request) {
+        setError('Unable to connect to the server. Please check your backend connection.')
+      } else {
+        setError(err.message || 'An error occurred during sign in.')
       }
-      localStorage.setItem('token', 'demo-jwt-token')
-      localStorage.setItem('user', JSON.stringify(dummyUser))
-      window.location.href = '/dashboard'
     } finally {
       setLoading(false)
     }
   }
 
-  const handleDemoLogin = () => {
+  const handleDemoLogin = async () => {
     setForm({ email: 'deva@example.com', password: 'password123' })
-    handleSubmit()
+    setError('')
+    setLoading(true)
+    try {
+      await login('deva@example.com', 'password123')
+      navigate('/dashboard')
+    } catch (err) {
+      if (err.response?.status === 401) {
+        setError('Invalid email or password.')
+      } else if (err.request) {
+        setError('Unable to connect to the server. Please check your backend connection.')
+      } else {
+        setError(err.message || 'Demo login failed.')
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
