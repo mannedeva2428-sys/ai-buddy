@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import ping_database
-from app.routers import auth, user, chat, widgets
+from app.routers import auth, user, chat, widgets, agreement
 
 
 @asynccontextmanager
@@ -40,15 +40,27 @@ app = FastAPI(
 )
 
 
+import os
+from app.config import settings
+
 # CORS configuration
+allowed_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5176",
+    "http://127.0.0.1:5176",
+]
+if settings.FRONTEND_URL and settings.FRONTEND_URL not in allowed_origins:
+    allowed_origins.append(settings.FRONTEND_URL)
+
+extra_origins = os.getenv("ALLOWED_ORIGINS")
+if extra_origins:
+    allowed_origins.extend([o.strip() for o in extra_origins.split(",") if o.strip()])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5176",
-        "http://127.0.0.1:5176",
-    ],
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.netlify\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -60,6 +72,8 @@ app.include_router(auth.router)
 app.include_router(user.router)
 app.include_router(chat.router)
 app.include_router(widgets.router)
+app.include_router(agreement.router)
+
 
 
 @app.get("/")

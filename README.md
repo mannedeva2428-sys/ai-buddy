@@ -170,3 +170,28 @@ To connect a real LLM (OpenAI) for smarter replies:
 - Auth uses **JWT bearer tokens** stored in `localStorage` on the frontend.
 - MongoDB access uses **Motor** (async driver) directly — no ORM, so the document shapes are documented in `backend/app/models/*.py` as plain comments for clarity.
 - Speech-to-Text and Text-to-Speech run **entirely in the browser** (Web Speech API) — no audio is ever sent to the backend, keeping the project simple and free to run.
+
+---
+
+## 🌐 Netlify Deployment
+
+This project is pre-configured with `netlify.toml` and `_redirects` for seamless Netlify deployment.
+
+### Deploying Frontend to Netlify:
+
+1. Push your repository to **GitHub** / **GitLab** / **Bitbucket**.
+2. Log in to [Netlify](https://app.netlify.com/) and click **Add new site** -> **Import an existing project**.
+3. Select your repository.
+4. Netlify will automatically detect build settings from `netlify.toml`:
+   - **Base directory:** `frontend`
+   - **Build command:** `npm run build`
+   - **Publish directory:** `dist` (or `frontend/dist`)
+5. In Netlify site settings -> **Environment variables**, set:
+   - `VITE_API_URL`: `https://your-backend-api-url.com` (URL of your deployed FastAPI backend)
+6. Click **Deploy Site**.
+
+### Backend Deployment (FastAPI + MongoDB):
+- Deploy the `backend` folder to a Python hosting platform such as **Render**, **Railway**, **Fly.io**, or **Koyeb**.
+- Set backend environment variables (`MONGO_URI`, `SECRET_KEY`, `FRONTEND_URL=https://your-app.netlify.app`).
+- MongoDB Atlas (free tier) can be used as the cloud database.
+

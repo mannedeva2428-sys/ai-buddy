@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import { authAPI, userAPI } from '../services/api'
+import { authAPI, userAPI, isTokenExpired } from '../services/api'
 
 const AuthContext = createContext(null)
 
@@ -12,6 +12,14 @@ export function AuthProvider({ children }) {
     const cachedUser = localStorage.getItem('user')
 
     if (token && cachedUser) {
+      if (isTokenExpired(token)) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        setUser(null)
+        setLoading(false)
+        return
+      }
+
       setUser(JSON.parse(cachedUser))
       // Verify the token is still valid & refresh user data in the background
       userAPI
@@ -21,7 +29,9 @@ export function AuthProvider({ children }) {
           localStorage.setItem('user', JSON.stringify(res.data))
         })
         .catch(() => {
-          // interceptor in api.js already clears storage & redirects on 401
+          localStorage.removeItem('token')
+          localStorage.removeItem('user')
+          setUser(null)
         })
         .finally(() => setLoading(false))
     } else {
@@ -51,17 +61,31 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
+  const refreshToken = async () => {
+    try {
+      const res = await authAPI.refreshToken()
+      localStorage.setItem('token', res.data.access_token)
+      localStorage.setItem('user', JSON.stringify(res.data.user))
+      setUser(res.data.user)
+      return res.data.access_token
+    } catch (err) {
+      logout()
+      throw err
+    }
+  }
+
   const updateUser = (updatedUser) => {
     setUser(updatedUser)
     localStorage.setItem('user', JSON.stringify(updatedUser))
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshToken, updateUser }}>
       {children}
     </AuthContext.Provider>
   )
 }
+
 
 export function useAuth() {
   const ctx = useContext(AuthContext)

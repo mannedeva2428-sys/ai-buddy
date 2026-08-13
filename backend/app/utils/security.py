@@ -5,7 +5,7 @@ import bcrypt
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from jose import jwt, JWTError
+from jose import jwt, JWTError, ExpiredSignatureError
 
 from app.config import settings
 
@@ -38,5 +38,16 @@ def decode_access_token(token: str) -> Optional[dict]:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
-    except JWTError:
+    except (ExpiredSignatureError, JWTError):
         return None
+
+
+def is_token_expired(token: str) -> bool:
+    try:
+        jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        return False
+    except ExpiredSignatureError:
+        return True
+    except JWTError:
+        return True
+

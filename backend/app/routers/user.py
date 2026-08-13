@@ -18,7 +18,10 @@ def user_to_out(user: dict) -> UserOut:
         email=user.get("email", ""),
         bio=user.get("bio", ""),
         avatar_color=user.get("avatar_color", "#6366F1"),
+        agreed_to_terms=user.get("agreed_to_terms", True),
+        agreed_at=user.get("agreed_at"),
     )
+
 
 
 @router.get("/me", response_model=UserOut)

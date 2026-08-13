@@ -4,6 +4,7 @@ import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import History from './pages/History'
 import Profile from './pages/Profile'
+import Terms from './pages/Terms'
 import ProtectedRoute from './components/ProtectedRoute'
 
 export default function App() {
@@ -11,6 +12,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/terms" element={<Terms />} />
 
       <Route
         path="/dashboard"
@@ -42,3 +44,4 @@ export default function App() {
     </Routes>
   )
 }
+

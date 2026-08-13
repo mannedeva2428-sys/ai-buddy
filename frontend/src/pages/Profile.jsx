@@ -156,6 +156,27 @@ export default function Profile() {
               />
             </div>
 
+            <hr className={isLight ? 'border-slate-200' : 'border-white/10'} />
+
+            {/* Legal & User Agreement Status */}
+            <div>
+              <h2 className={`text-xs font-bold mb-1 ${isLight ? 'text-slate-900' : 'text-white'}`}>Legal & User Agreement</h2>
+              <div className={`p-3.5 rounded-xl border flex items-center justify-between ${
+                isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/40 border-white/10'
+              }`}>
+                <div className="flex items-center gap-2 text-xs font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span>Terms & Privacy Accepted</span>
+                </div>
+                <a
+                  href="/terms"
+                  className="text-xs font-semibold text-indigo-500 hover:underline"
+                >
+                  View Terms
+                </a>
+              </div>
+            </div>
+
             <button
               type="submit"
               disabled={saving}
@@ -164,6 +185,7 @@ export default function Profile() {
               {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save changes'}
             </button>
           </form>
+
         </div>
       </main>
 

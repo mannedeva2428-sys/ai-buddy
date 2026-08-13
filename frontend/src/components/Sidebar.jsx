@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Sun, Moon } from 'lucide-react'
+import { Sun, Moon, FileText } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 
@@ -7,7 +7,9 @@ const navItems = [
   { to: '/dashboard', label: 'Assistant', icon: MicIcon },
   { to: '/history', label: 'Chat History', icon: HistoryIcon },
   { to: '/profile', label: 'Profile', icon: UserIcon },
+  { to: '/terms', label: 'Terms & Privacy', icon: FileText },
 ]
+
 
 export default function Sidebar() {
   const { user, logout } = useAuth()

@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Sun, Moon } from 'lucide-react'
+import { Sun, Moon, ShieldCheck } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { BackgroundGlow } from './Login'
+import TermsModal from '../components/TermsModal'
 
 export default function Register() {
   const { register } = useAuth()
@@ -12,6 +13,8 @@ export default function Register() {
 
   const navigate = useNavigate()
   const [form, setForm] = useState({ name: '', email: '', password: '' })
+  const [agreedToTerms, setAgreedToTerms] = useState(false)
+  const [showTermsModal, setShowTermsModal] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -23,6 +26,11 @@ export default function Register() {
 
     if (form.password.length < 6) {
       setError('Password must be at least 6 characters.')
+      return
+    }
+
+    if (!agreedToTerms) {
+      setError('You must agree to the User Agreement & Terms of Service.')
       return
     }
 
@@ -117,6 +125,28 @@ export default function Register() {
             />
           </div>
 
+          {/* Terms Agreement Checkbox */}
+          <div className="pt-1">
+            <label className="flex items-start gap-2.5 text-xs select-none cursor-pointer">
+              <input
+                type="checkbox"
+                checked={agreedToTerms}
+                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                className="mt-0.5 rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-0 cursor-pointer"
+              />
+              <span className={isLight ? 'text-slate-600' : 'text-slate-400'}>
+                I agree to the{' '}
+                <button
+                  type="button"
+                  onClick={() => setShowTermsModal(true)}
+                  className="font-medium text-indigo-500 hover:underline cursor-pointer"
+                >
+                  Terms of Service & Privacy Policy
+                </button>
+              </span>
+            </label>
+          </div>
+
           <button
             type="submit"
             disabled={loading}
@@ -132,8 +162,14 @@ export default function Register() {
             Sign in
           </Link>
         </p>
+
+        {/* Interactive Terms Modal */}
+        <TermsModal
+          isOpen={showTermsModal}
+          onClose={() => setShowTermsModal(false)}
+          onAccept={() => setAgreedToTerms(true)}
+        />
       </div>
     </div>
   )
 }
-

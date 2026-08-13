@@ -23,13 +23,24 @@ async def get_current_user(token: str | None = Depends(oauth2_scheme)) -> dict:
     if not token:
         return DEFAULT_GUEST_USER
 
+    if token == "demo-jwt-token":
+        return DEFAULT_GUEST_USER
+
     payload = decode_access_token(token)
     if payload is None:
-        return DEFAULT_GUEST_USER
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired or is invalid",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     user_id = payload.get("sub")
     if user_id is None:
-        return DEFAULT_GUEST_USER
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     try:
         user = await users_collection.find_one({"_id": ObjectId(user_id)})
@@ -38,6 +49,11 @@ async def get_current_user(token: str | None = Depends(oauth2_scheme)) -> dict:
     except Exception:
         pass
 
-    return DEFAULT_GUEST_USER
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="User not found for this token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
 
 
