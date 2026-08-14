@@ -9,12 +9,19 @@ load_dotenv()
 
 
 class Settings:
-    MONGO_URI: str = (
-        os.getenv("MONGODB_URL")
+    MONGODB_URI: str = (
+        os.getenv("MONGODB_URI")
+        or os.getenv("MONGODB_URL")
         or os.getenv("MONGO_URI")
-        or "mongodb://localhost:27017"
+        or "mongodb://localhost:27017/ai_buddy"
     )
-    DATABASE_NAME: str = os.getenv("DATABASE_NAME", "voice_assistant_db")
+    DATABASE_NAME: str = os.getenv("DATABASE_NAME", "ai_buddy")
+
+    @property
+    def MONGO_URI(self) -> str:
+        """Backward compatibility property for legacy MONGO_URI access."""
+        return self.MONGODB_URI
+
 
     SECRET_KEY: str = (
         os.getenv("JWT_SECRET_KEY")

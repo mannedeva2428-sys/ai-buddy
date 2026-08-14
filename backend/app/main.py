@@ -20,7 +20,7 @@ from app.routers.auth import seed_default_user
 async def lifespan(app: FastAPI):
     # Confirm MongoDB is reachable when the server starts.
     try:
-        await asyncio.wait_for(ping_database(), timeout=5.0)
+        await asyncio.wait_for(ping_database(), timeout=10.0)
         print("Connected to MongoDB successfully")
         await seed_default_user()
     except Exception as e:
@@ -64,7 +64,7 @@ if extra_origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+)(:\d+)?|https://.*\.netlify\.app|https://.*\.onrender\.com",
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+)(:\d+)?|https://.*\.netlify\.app|https://.*\.onrender\.com|https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
